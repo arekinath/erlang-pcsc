@@ -1,0 +1,8 @@
+[
+    {lager, [
+        {log_root, "log"},
+        {handlers, [
+            {lager_console_backend, [{level, info}]}
+        ]}
+    ]}
+].

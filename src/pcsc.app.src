@@ -1,13 +1,14 @@
 {application, pcsc,
- [{description, "An OTP library"},
-  {vsn, "0.1.0"},
+ [{description, "PCSC binding for Erlang"},
+  {vsn, "1.0.0"},
   {registered, []},
   {applications,
    [kernel,
+    lager,
     stdlib
    ]},
+  {mod, {pcsc_app, []}},
   {env,[]},
-  {modules, []},
 
   {licenses, ["Apache 2.0"]},
   {links, []}

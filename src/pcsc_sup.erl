@@ -23,34 +23,38 @@
 %% (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 %% THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
--module(pcsc).
+%% @private
+-module(pcsc_sup).
 
--compile([{parse_transform, lager_transform}]).
+-behaviour(supervisor).
 
--export_type([rdrname/0, sharemode/0, protocol/0, disposition/0,
-    rdrstate/0]).
+-export([start_link/0]).
 
--include("iso7816.hrl").
+-export([init/1]).
 
--type rdrname() :: binary().
-%% The unique name given to a particular PCSC card reader on the system.
+-define(SERVER, ?MODULE).
 
--type sharemode() :: shared | exclusive | direct.
-%% The "share mode" for a card or reader connection, which determines whether
-%% there can be other connections open to this same card at the same time (and
-%% therefore transactions are required to "lock" the reader). The
-%% <code>direct</code> sharemode can be used to send APDUs directly to the
-%% reader itself.
+start_link() ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
--type protocol() :: t0 | t1 | raw | direct.
-%% The ISO7816 protocol in use to communicate with a particular card. The
-%% <code>direct</code> protocol, if given to <code>pcsc_card:command()</code>,
-%% will trigger the use of <code>SCardControl</code> to send a reader-directed
-%% command.
+%% sup_flags() = #{strategy => strategy(),         % optional
+%%                 intensity => non_neg_integer(), % optional
+%%                 period => pos_integer()}        % optional
+%% child_spec() = #{id => child_id(),       % mandatory
+%%                  start => mfargs(),      % mandatory
+%%                  restart => restart(),   % optional
+%%                  shutdown => shutdown(), % optional
+%%                  type => worker(),       % optional
+%%                  modules => modules()}   % optional
+init([]) ->
+    SupFlags = #{strategy => one_for_one,
+        intensity => 2,
+        period => 1},
+    ChildSpecs = [
+        #{id => pcsc_card_db,
+          start => {pcsc_card_db, start_link, []},
+          type => worker}
+    ],
+    {ok, {SupFlags, ChildSpecs}}.
 
--type disposition() :: leave | reset | unpower | eject.
-%% Action to take at the end of a transaction or connection.
-
--type rdrstate() :: unknown | unavailable | empty | present | exclusive |
-    inuse | mute.
-%% State flags which show the current status of a PCSC card reader.
+%% internal functions
