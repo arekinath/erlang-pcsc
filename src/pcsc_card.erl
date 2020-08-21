@@ -279,7 +279,8 @@ handle_call({command, Mod0, Cmd}, _From, S0 = #?MODULE{modstack = Stack0}) ->
         false ->
             Formats = [{M, M:formats()} || M <- Stack0],
             Matches = [M || {M, {Cooked, _Raw}} <- Formats,
-                lists:member(Mod0, Cooked)],
+                lists:member(Mod0,
+                    if is_list(Cooked) -> Cooked; true -> [Cooked] end)],
             case Matches of
                 [] -> undefined;
                 [M | _] -> M
