@@ -11,5 +11,6 @@
   {env,[]},
 
   {licenses, ["BSD-2-Clause"]},
-  {links, [{"GitHub", "https://github.com/arekinath/erlang-pcsc"}]}
+  {links, [{"GitHub", "https://github.com/arekinath/erlang-pcsc"},
+      {"API docs", "https://arekinath.github.io/erlang-pcsc/index.html"}]}
  ]}.
