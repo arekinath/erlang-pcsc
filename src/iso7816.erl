@@ -88,6 +88,7 @@
     {error, p1p2} |
     {error, wrong_data} |
     {error, general_failure} |
+    {desfire, integer()} |
     {error, integer()}.
 -type iso_warning_unch() :: unchanged | part_corrupted | eof | deactivated |
     bad_format | terminated | no_input | {unchanged, integer()}.
@@ -350,6 +351,8 @@ decode_sw(<<16#90, _>>) -> ok;
 decode_sw(<<16#61, Rem>>) -> {continue, Rem};
 decode_sw(<<16#6c, Le>>) -> {requires_le, Le};
 
+decode_sw(<<16#91, N>>) -> {desfire, N};
+
 decode_sw(<<16#62, 16#00>>) -> {warning, unchanged};
 decode_sw(<<16#62, 16#81>>) -> {warning, part_corrupted};
 decode_sw(<<16#62, 16#82>>) -> {warning, eof};
@@ -427,6 +430,8 @@ decode_sw(<<I:16/big>>) -> {error, I}.
 encode_sw(ok) -> <<16#90, 0>>;
 encode_sw({continue, Rem}) -> <<16#61, Rem>>;
 encode_sw({requires_le, Le}) -> <<16#6c, Le>>;
+
+encode_sw({desfire, N}) -> <<16#91, N>>;
 
 encode_sw({warning, unchanged}) -> <<16#62, 16#00>>;
 encode_sw({warning, part_corrupted}) -> <<16#62, 16#81>>;
