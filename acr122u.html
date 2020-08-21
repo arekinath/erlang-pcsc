@@ -1,0 +1,139 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module acr122u</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module acr122u</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>A pcsc_apdu_transform implementation which handles proprietary APDU       
+formats used by the ACR122(U) and compatible NFC readers.
+
+<p><b>Behaviours:</b> <a href="pcsc_apdu_transform.html"><tt>pcsc_apdu_transform</tt></a>.</p>
+
+<h2><a name="description">Description</a></h2><p>A pcsc_apdu_transform implementation which handles proprietary APDU       
+formats used by the ACR122(U) and compatible NFC readers.</p>
+ 
+  <p>This includes control commands which can manage the buzzer and LEDs and
+  change parameters which are relevant with or without a card present. To
+  use these commands without requiring a card, use the <code>direct</code>  
+share mode (with empty protocols list).</p>
+ 
+  <p>To use direct control commands you may need to enable PCSC/CCID "escape"  
+commands in the relevant driver configuration on your system.</p>
+ 
+  This module is based on documentation from ACS available online at:
+  <a href="https://www.acs.com.hk/en/download-manual/419/API-ACR122U-2.04.pdf">
+  https://www.acs.com.hk/en/download-manual/419/API-ACR122U-2.04.pdf
+  </a>
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-command">command()</a></h3>
+<p><tt>command() = <a href="#type-get_firmware_version_command">get_firmware_version_command()</a> | <a href="#type-get_ats_command">get_ats_command()</a> | <a href="#type-get_uid_command">get_uid_command()</a> | <a href="#type-set_auto_buzzer_command">set_auto_buzzer_command()</a> | <a href="#type-led_buzzer_command">led_buzzer_command()</a> | <a href="iso7816.html#type-apdu_cmd">iso7816:apdu_cmd()</a></tt></p>
+
+
+<h3 class="typedecl"><a name="type-felica_subtype">felica_subtype()</a></h3>
+<p><tt>felica_subtype() = felica212k | felica424k</tt></p>
+
+
+<h3 class="typedecl"><a name="type-get_ats_command">get_ats_command()</a></h3>
+<p><tt>get_ats_command() = get_ats</tt></p>
+<p>  Retrieve an NFC card's Answer to Select (ATS) value.</p>
+
+<h3 class="typedecl"><a name="type-get_ats_reply">get_ats_reply()</a></h3>
+<p><tt>get_ats_reply() = {ok, binary()} | {error, term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-get_firmware_version_command">get_firmware_version_command()</a></h3>
+<p><tt>get_firmware_version_command() = get_firmware_version</tt></p>
+<p>  Retrieves the firmware version.</p>
+
+<h3 class="typedecl"><a name="type-get_firmware_version_reply">get_firmware_version_reply()</a></h3>
+<p><tt>get_firmware_version_reply() = {ok, binary()} | {error, term()}</tt></p>
+<p>  Binary will contain an ASCII string like "ACR122U201".</p>
+
+<h3 class="typedecl"><a name="type-get_uid_command">get_uid_command()</a></h3>
+<p><tt>get_uid_command() = get_uid</tt></p>
+<p>  Retrieve an NFC card's UID or serial number.</p>
+
+<h3 class="typedecl"><a name="type-get_uid_reply">get_uid_reply()</a></h3>
+<p><tt>get_uid_reply() = {ok, binary()} | {error, term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-led_buzzer_command">led_buzzer_command()</a></h3>
+<p><tt>led_buzzer_command() = {led_buzzer, Repeats::integer(), Initial::<a href="#type-led_buzzer_state">led_buzzer_state()</a>, Final::<a href="#type-led_buzzer_state">led_buzzer_state()</a>}</tt></p>
+<p><p>  Control the LEDs and buzzer on the reader. This command will induce a  
+repeating, alternating pattern between two states (initial and final),  
+and then leave the LED and buzzer in the "final" state.</p>
+ 
+  For example, to make the red LED turn on and stay on, use:
+  <pre>
+    {led_buzzer, 1, #{}, #{red =&gt; on}}
+  </pre>
+ 
+  To make the red LED blink on and off 3 times at 200ms intervals, and then
+  stay off at the end, use:
+  <pre>
+    {led_buzzer, 3, #{red =&gt; on, for =&gt; 200}, #{red =&gt; off, for =&gt; 200}}
+  </pre>
+ 
+  To make the green LED flash once for 200ms and sound the buzzer, then turn
+  off and stay off, use:
+  <pre>
+    {led_buzzer, 1, #{green =&gt; on, buzz =&gt; true, for =&gt; 200}, #{green =&gt; off}}
+  </pre></p>
+
+<h3 class="typedecl"><a name="type-led_buzzer_reply">led_buzzer_reply()</a></h3>
+<p><tt>led_buzzer_reply() = ok | {error, term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-led_buzzer_state">led_buzzer_state()</a></h3>
+<p><tt>led_buzzer_state() = #{red =&gt; on | off, green =&gt; on | off, for =&gt; <a href="#type-msec">msec()</a>, buzz =&gt; boolean()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-mifare_subtype">mifare_subtype()</a></h3>
+<p><tt>mifare_subtype() = mifare1k | mifare4k | ultralight | mini</tt></p>
+
+
+<h3 class="typedecl"><a name="type-msec">msec()</a></h3>
+<p><tt>msec() = integer()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-reply">reply()</a></h3>
+<p><tt>reply() = <a href="#type-get_firmware_version_reply">get_firmware_version_reply()</a> | <a href="#type-get_ats_reply">get_ats_reply()</a> | <a href="#type-get_uid_reply">get_uid_reply()</a> | <a href="#type-set_auto_buzzer_reply">set_auto_buzzer_reply()</a> | <a href="#type-led_buzzer_reply">led_buzzer_reply()</a> | <a href="iso7816.html#type-apdu_reply">iso7816:apdu_reply()</a></tt></p>
+
+
+<h3 class="typedecl"><a name="type-set_auto_buzzer_command">set_auto_buzzer_command()</a></h3>
+<p><tt>set_auto_buzzer_command() = {set_auto_buzzer, on | off}</tt></p>
+<p>  Set whether the reader will sound its buzzer automatically when an NFC card
+  is detected.</p>
+
+<h3 class="typedecl"><a name="type-set_auto_buzzer_reply">set_auto_buzzer_reply()</a></h3>
+<p><tt>set_auto_buzzer_reply() = ok | {error, term()}</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#classify_emulated_atr-1">classify_emulated_atr/1</a></td><td>Takes a decoded ATR and classifies whether it is one of the "emulated"
+  card types which does not accept ISO7816 APDUs (but the ACR122U will
+  translate certain APDUs for us).</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="classify_emulated_atr-1">classify_emulated_atr/1</a></h3>
+<div class="spec">
+<p><tt>classify_emulated_atr(X1::<a href="iso7816.html#type-atr_info">iso7816:atr_info()</a>) -&gt; not_emulated | unknown | {mifare, <a href="#type-mifare_subtype">mifare_subtype()</a>} | topaz_jewel | {felica, <a href="#type-felica_subtype">felica_subtype()</a>}</tt><br></p>
+<p> </p>
+</div><p>Takes a decoded ATR and classifies whether it is one of the "emulated"
+  card types which does not accept ISO7816 APDUs (but the ACR122U will
+  translate certain APDUs for us).</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

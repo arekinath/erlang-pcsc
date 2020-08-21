@@ -1,0 +1,4 @@
+%% encoding: UTF-8
+{application,pcsc}.
+{modules,[acr122u,iso7816,iso7816_chain,pcsc,pcsc_apdu_transform,pcsc_app,
+          pcsc_card,pcsc_card_db]}.

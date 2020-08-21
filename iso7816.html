@@ -1,0 +1,179 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module iso7816</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module iso7816</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Utilities for parsing and generating ISO7816 APDUs.
+
+<p><b>Behaviours:</b> <a href="pcsc_apdu_transform.html"><tt>pcsc_apdu_transform</tt></a>.</p>
+
+<h2><a name="description">Description</a></h2>Utilities for parsing and generating ISO7816 APDUs. Also a
+       pcsc_apdu_transform implementation which does the same.
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-apdu_cmd">apdu_cmd()</a></h3>
+<p><tt>apdu_cmd() = #apdu_cmd{proto = default | <a href="pcsc.html#type-protocol">pcsc:protocol()</a>, cla = <a href="iso7816.html#type-cls">iso7816:cls()</a>, ins = <a href="iso7816.html#type-ins">iso7816:ins()</a>, p1 = <a href="iso7816.html#type-p1">iso7816:p1()</a>, p2 = <a href="iso7816.html#type-p2">iso7816:p2()</a>, data = none | binary(), le = none | <a href="iso7816.html#type-le">iso7816:le()</a>}</tt></p>
+<p>  The type of a standard APDU command. See ISO7816 for the definitions of
+  these fields.</p>
+
+<h3 class="typedecl"><a name="type-apdu_reply">apdu_reply()</a></h3>
+<p><tt>apdu_reply() = #apdu_reply{proto = <a href="pcsc.html#type-protocol">pcsc:protocol()</a>, sw = <a href="iso7816.html#type-sw">iso7816:sw()</a>, data = none | binary()}</tt></p>
+<p>  The type of a reply to an APDU command.</p>
+
+<h3 class="typedecl"><a name="type-atr_info">atr_info()</a></h3>
+<p><tt>atr_info() = #{t0 =&gt; #{wi =&gt; integer()}, t1 =&gt; #{ifsc =&gt; integer(), cwi =&gt; integer(), bwi =&gt; integer(), checksum =&gt; lrc | crc}, status =&gt; {<a href="#type-iso_sw">iso_sw()</a>, LCS::integer()}, fi =&gt; integer(), fmax =&gt; integer(), di =&gt; integer(), guardn =&gt; integer(), historical_bytes =&gt; {proprietary, binary()} | standard, country_code =&gt; binary(), issuer =&gt; binary(), aid =&gt; binary(), initial_data_cmd =&gt; <a href="#type-apdu_cmd">apdu_cmd()</a>, initial_data =&gt; binary(), service_data =&gt; binary(), isseru_data =&gt; binary(), preissuing_data =&gt; binary(), df_selection =&gt; [full_name | part_name | path | file_id], implicit_df =&gt; boolean(), short_ef =&gt; boolean(), record_num =&gt; boolean(), record_id =&gt; boolean(), ef_ber_tlv =&gt; boolean(), write_functions =&gt; one_time | proprietary | write_or | write_and, long_private_tags =&gt; boolean(), data_unit_size =&gt; integer(), chain_support =&gt; boolean(), extended_length =&gt; boolean(), extended_length_atr =&gt; boolean(), logical_chan_assign =&gt; [card | host], logical_chans =&gt; integer(), application_family =&gt; binary(), leftovers =&gt; binary()}</tt></p>
+<p> 
+  Information decoded from an ATR value.</p>
+
+<h3 class="typedecl"><a name="type-ber_tlv_tag">ber_tlv_tag()</a></h3>
+<p><tt>ber_tlv_tag() = {Tag::integer(), Data::binary() | [<a href="#type-ber_tlv_tag">ber_tlv_tag()</a>]}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-channel">channel()</a></h3>
+<p><tt>channel() = integer()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-cls">cls()</a></h3>
+<p><tt>cls() = iso | {iso, chain} | {iso, <a href="#type-channel">channel()</a>} | {iso, chain, <a href="#type-channel">channel()</a>} | integer()</tt></p>
+<p>  The ISO7816 "class" field for a command APDU.</p>
+
+<h3 class="typedecl"><a name="type-ins">ins()</a></h3>
+<p><tt>ins() = <a href="#type-iso_ins">iso_ins()</a> | integer()</tt></p>
+<p>  The ISO7816 "instruction" field for a command APDU.</p>
+
+<h3 class="typedecl"><a name="type-iso_error_ch">iso_error_ch()</a></h3>
+<p><tt>iso_error_ch() = changed | memory_failure | {changed, integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_error_cla">iso_error_cla()</a></h3>
+<p><tt>iso_error_cla() = no_info | bad_chain | not_supported | {not_supported, channel | secure_msg | chain}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_error_cmd">iso_error_cmd()</a></h3>
+<p><tt>iso_error_cmd() = no_info | incompat_file | security_status | auth_method | conditions | no_ef | requires_secure_msg | bad_secure_msg | integer()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_error_format">iso_error_format()</a></h3>
+<p><tt>iso_error_format() = length | apdu | lc | lc_tlv_mismatch</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_error_sec">iso_error_sec()</a></h3>
+<p><tt>iso_error_sec() = integer()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_error_unch">iso_error_unch()</a></h3>
+<p><tt>iso_error_unch() = unchanged | immediate_response | channel_share_denied | channel_denied | {unchanged, integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_ins">iso_ins()</a></h3>
+<p><tt>iso_ins() = change_ref_data | external_auth | general_auth | generate_asym_key | get_response | get_data | put_data | select | verify | reset_retry_counter</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_sw">iso_sw()</a></h3>
+<p><tt>iso_sw() = ok | {continue, integer()} | {requires_le, integer()} | {counter, integer()} | {warning, <a href="#type-iso_warning_unch">iso_warning_unch()</a>} | {warning, <a href="#type-iso_warning_ch">iso_warning_ch()</a>} | {error, {system, <a href="#type-iso_error_unch">iso_error_unch()</a>}} | {error, {system, <a href="#type-iso_error_ch">iso_error_ch()</a>}} | {error, {security, <a href="#type-iso_error_sec">iso_error_sec()</a>}} | {error, {denied, <a href="#type-iso_error_cmd">iso_error_cmd()</a>}} | {error, {format, <a href="#type-iso_error_format">iso_error_format()</a>}} | {error, {cla, <a href="#type-iso_error_cla">iso_error_cla()</a>}} | {error, {ins, not_supported}} | {error, {file, not_found}} | {error, {file, invalid}} | {error, {file, out_of_memory}} | {error, {file, exists}} | {error, {record, not_found}} | {error, {ref_data, not_found | unusable}} | {error, data_required} | {error, func_not_supported} | {error, p1p2} | {error, wrong_data} | {error, general_failure} | {error, integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_warning_ch">iso_warning_ch()</a></h3>
+<p><tt>iso_warning_ch() = changed | bad_compare | file_full | {changed, integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-iso_warning_unch">iso_warning_unch()</a></h3>
+<p><tt>iso_warning_unch() = unchanged | part_corrupted | eof | deactivated | bad_format | terminated | no_input | {unchanged, integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-le">le()</a></h3>
+<p><tt>le() = none | integer()</tt></p>
+<p>  Expected length of reply field (optional).</p>
+
+<h3 class="typedecl"><a name="type-p1">p1()</a></h3>
+<p><tt>p1() = integer()</tt></p>
+<p>  First parameter byte in a command APDU.</p>
+
+<h3 class="typedecl"><a name="type-p2">p2()</a></h3>
+<p><tt>p2() = integer()</tt></p>
+<p>  Second parameter byte in a command APDU.</p>
+
+<h3 class="typedecl"><a name="type-sw">sw()</a></h3>
+<p><tt>sw() = <a href="#type-iso_sw">iso_sw()</a> | integer()</tt></p>
+<p>  Status word in a reply APDU.</p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#decode_apdu_cmd-1">decode_apdu_cmd/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_apdu_reply-1">decode_apdu_reply/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_atr-1">decode_atr/1</a></td><td>Decodes an ATR into the different encoded fields and information.</td></tr>
+<tr><td valign="top"><a href="#decode_ber_tlv-1">decode_ber_tlv/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_ber_tlvs-1">decode_ber_tlvs/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_apdu_cmd-1">encode_apdu_cmd/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_apdu_reply-1">encode_apdu_reply/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_ber_tlv-2">encode_ber_tlv/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_ber_tlvs-1">encode_ber_tlvs/1</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="decode_apdu_cmd-1">decode_apdu_cmd/1</a></h3>
+<div class="spec">
+<p><tt>decode_apdu_cmd(X1::binary()) -&gt; <a href="#type-apdu_cmd">apdu_cmd()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="decode_apdu_reply-1">decode_apdu_reply/1</a></h3>
+<div class="spec">
+<p><tt>decode_apdu_reply(Bin::binary()) -&gt; <a href="#type-apdu_reply">apdu_reply()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="decode_atr-1">decode_atr/1</a></h3>
+<div class="spec">
+<p><tt>decode_atr(X1::binary()) -&gt; <a href="#type-atr_info">atr_info()</a></tt><br></p>
+<p> </p>
+</div><p>Decodes an ATR into the different encoded fields and information.</p>
+
+<h3 class="function"><a name="decode_ber_tlv-1">decode_ber_tlv/1</a></h3>
+<div class="spec">
+<p><tt>decode_ber_tlv(X1::binary()) -&gt; {ok, integer(), binary(), binary()} | {error, term()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="decode_ber_tlvs-1">decode_ber_tlvs/1</a></h3>
+<div class="spec">
+<p><tt>decode_ber_tlvs(Bin::binary()) -&gt; {ok, [<a href="#type-ber_tlv_tag">ber_tlv_tag()</a>]} | {error, term()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="encode_apdu_cmd-1">encode_apdu_cmd/1</a></h3>
+<div class="spec">
+<p><tt>encode_apdu_cmd(Apdu_cmd::<a href="#type-apdu_cmd">apdu_cmd()</a>) -&gt; binary()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="encode_apdu_reply-1">encode_apdu_reply/1</a></h3>
+<div class="spec">
+<p><tt>encode_apdu_reply(Apdu_reply::<a href="#type-apdu_reply">apdu_reply()</a>) -&gt; binary()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="encode_ber_tlv-2">encode_ber_tlv/2</a></h3>
+<div class="spec">
+<p><tt>encode_ber_tlv(Tag::integer(), Data::binary()) -&gt; binary()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="encode_ber_tlvs-1">encode_ber_tlvs/1</a></h3>
+<div class="spec">
+<p><tt>encode_ber_tlvs(Tlvs::[<a href="#type-ber_tlv_tag">ber_tlv_tag()</a>]) -&gt; binary()</tt><br></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

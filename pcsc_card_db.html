@@ -1,0 +1,149 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module pcsc_card_db</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module pcsc_card_db</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Tracks the available readers and cards on the system, providing       
+functions for listing the current state as well as subscribing to       
+changes.
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+
+<h2><a name="description">Description</a></h2><p>Tracks the available readers and cards on the system, providing       
+functions for listing the current state as well as subscribing to       
+changes.</p>
+ 
+  <h3>Example</h3>
+  <pre>
+    1&gt; pcsc_card_db:list_readers().
+    {ok,[&lt;&lt;"Yubico YubiKey OTP+FIDO+CCID 00 00"&gt;&gt;,
+         &lt;&lt;"Alcor Micro AU9560 01 00"&gt;&gt;,
+         &lt;&lt;"ACS ACR122U PICC Interface 02 00"&gt;&gt;]}
+ 
+    2&gt; pcsc_card_db:get_reader_state(&lt;&lt;"ACS ACR122U PICC Interface 02 00"&gt;&gt;).
+    {ok,[empty]}
+ 
+    3&gt; pcsc_card_db:monitor_cards(#{in_reader =&gt; #{name_contains =&gt; &lt;&lt;"ACS"&gt;&gt;}}).
+    {ok,#Ref&lt;0.2854622174.861143041.134395&gt;}
+ 
+    4&gt; flush().
+    ok
+    5&gt; flush().
+    Shell got {pcsc_card,inserted,#Ref&lt;0.2854622174.861143041.134395&gt;,
+                         &lt;&lt;"ACS ACR122U PICC Interface 02 00"&gt;&gt;,
+                         &lt;&lt;59,129,128,1,128,128&gt;&gt;}
+    ok
+    6&gt; flush().
+    Shell got {pcsc_card,removed,#Ref&lt;0.2854622174.861143041.134395&gt;,
+                         &lt;&lt;"ACS ACR122U PICC Interface 02 00"&gt;&gt;}
+    ok
+  </pre>
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-card_filter">card_filter()</a></h3>
+<p><tt>card_filter() = #{atr =&gt; binary(), atr_prefix =&gt; binary(), atr_contains =&gt; binary(), in_reader =&gt; <a href="#type-reader_filter">reader_filter()</a>}</tt></p>
+<p> 
+  A filter for selecting which cards to receive events about.</p>
+
+<h3 class="typedecl"><a name="type-card_monitor_msg">card_monitor_msg()</a></h3>
+<p><tt>card_monitor_msg() = {pcsc_card, inserted, reference(), RdrName::binary(), ATR::binary()} | {pcsc_card, removed, reference(), RdrName::binary()}</tt></p>
+<p>  Messages sent to a subscriber who has called monitor_cards() when a card is
+  inserted or removed on the system.</p>
+
+<h3 class="typedecl"><a name="type-reader_filter">reader_filter()</a></h3>
+<p><tt>reader_filter() = #{name =&gt; binary(), name_prefix =&gt; binary(), name_contains =&gt; binary()}</tt></p>
+<p> 
+  A filter for selecting which readers to receive events about.</p>
+
+<h3 class="typedecl"><a name="type-reader_monitor_msg">reader_monitor_msg()</a></h3>
+<p><tt>reader_monitor_msg() = {pcsc_reader, available | unavailable, reference(), RdrName::binary()}</tt></p>
+<p>  Messages sent to a subscriber who has called monitor_readers() when a
+  card reader becomes available or ceases to be.</p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#demonitor_cards-1">demonitor_cards/1</a></td><td>Cancels a subscription set up by a call to <code>monitor_cards/1</code>.</td></tr>
+<tr><td valign="top"><a href="#demonitor_readers-1">demonitor_readers/1</a></td><td>Cancels a subscription set up by a call to <code>monitor_readers/1</code>.</td></tr>
+<tr><td valign="top"><a href="#get_reader_atr-1">get_reader_atr/1</a></td><td>Retrieves the last known ATR sent by a card in a particular card reader.</td></tr>
+<tr><td valign="top"><a href="#get_reader_state-1">get_reader_state/1</a></td><td>Retrieves the last known status of a particular card reader, including
+       whether it has a card inserted and whether it is busy.</td></tr>
+<tr><td valign="top"><a href="#list_cards-0">list_cards/0</a></td><td>Lists available cards on the system, with their reader names and ATRs.</td></tr>
+<tr><td valign="top"><a href="#list_readers-0">list_readers/0</a></td><td>Returns the current list of card readers on the system, whether they
+       contain a card or not.</td></tr>
+<tr><td valign="top"><a href="#monitor_cards-1">monitor_cards/1</a></td><td>Subscribes the calling process to notifications about changes to the
+       set of available cards on the system.</td></tr>
+<tr><td valign="top"><a href="#monitor_readers-1">monitor_readers/1</a></td><td>Subscribes the calling process to notifications about changes to the
+       set of available readers on the system.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="demonitor_cards-1">demonitor_cards/1</a></h3>
+<div class="spec">
+<p><tt>demonitor_cards(Ref::reference()) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Cancels a subscription set up by a call to <code>monitor_cards/1</code>.</p>
+
+<h3 class="function"><a name="demonitor_readers-1">demonitor_readers/1</a></h3>
+<div class="spec">
+<p><tt>demonitor_readers(Ref::reference()) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Cancels a subscription set up by a call to <code>monitor_readers/1</code>.</p>
+
+<h3 class="function"><a name="get_reader_atr-1">get_reader_atr/1</a></h3>
+<div class="spec">
+<p><tt>get_reader_atr(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>) -&gt; {ok, binary()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Retrieves the last known ATR sent by a card in a particular card reader.</p>
+
+<h3 class="function"><a name="get_reader_state-1">get_reader_state/1</a></h3>
+<div class="spec">
+<p><tt>get_reader_state(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>) -&gt; {ok, [<a href="pcsc.html#type-rdrstate">pcsc:rdrstate()</a>]} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Retrieves the last known status of a particular card reader, including
+       whether it has a card inserted and whether it is busy.</p>
+
+<h3 class="function"><a name="list_cards-0">list_cards/0</a></h3>
+<div class="spec">
+<p><tt>list_cards() -&gt; {ok, [{<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>, ATR::binary()}]} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Lists available cards on the system, with their reader names and ATRs.</p>
+
+<h3 class="function"><a name="list_readers-0">list_readers/0</a></h3>
+<div class="spec">
+<p><tt>list_readers() -&gt; {ok, [<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>]} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Returns the current list of card readers on the system, whether they
+       contain a card or not.</p>
+
+<h3 class="function"><a name="monitor_cards-1">monitor_cards/1</a></h3>
+<div class="spec">
+<p><tt>monitor_cards(Filter::<a href="#type-card_filter">card_filter()</a>) -&gt; {ok, reference()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Subscribes the calling process to notifications about changes to the
+       set of available cards on the system. Messages received by callers
+       are of the type <code>card_monitor_msg()</code>. Returns a reference
+       value which can be used to identify messages sent by this subscription
+       and also useful with <code>demonitor_cards/1</code></p>
+
+<h3 class="function"><a name="monitor_readers-1">monitor_readers/1</a></h3>
+<div class="spec">
+<p><tt>monitor_readers(Filter::<a href="#type-reader_filter">reader_filter()</a>) -&gt; {ok, reference()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Subscribes the calling process to notifications about changes to the
+       set of available readers on the system. Messages received by callers
+       are of the type <code>reader_monitor_msg()</code>. Returns a reference
+       value which can be used to identify messages sent by this subscription
+       and also useful with <code>demonitor_readers/1</code></p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module pcsc_card</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module pcsc_card</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>A connection to a particular card or card reader, over which APDUs       
+may be exchanged.
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+
+<h2><a name="description">Description</a></h2><p>A connection to a particular card or card reader, over which APDUs       
+may be exchanged.</p>
+ 
+  <h3>Example</h3>
+  <pre>
+   {ok, Readers} = pcsc_card_db:list_readers(),
+   [Reader | _] = Readers,
+   {ok, Card} = pcsc_card:start(Reader, shared, [t1, t0]),
+   ok = pcsc_card:begin_transaction(Card),
+   {ok, Replies} = pcsc_card:command(Card,
+       #apdu_cmd{cla = iso, ins = select, data = &lt;&lt;...&gt;&gt;}),
+   ok = pcsc_card:end_transaction(Card).
+  </pre>
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-mod_or_fmt">mod_or_fmt()</a></h3>
+<p><tt>mod_or_fmt() = <a href="pcsc_apdu_transform.html#type-mod">pcsc_apdu_transform:mod()</a> | <a href="pcsc_apdu_transform.html#type-format">pcsc_apdu_transform:format()</a></tt></p>
+
+
+<h3 class="typedecl"><a name="type-options">options()</a></h3>
+<p><tt>options() = #{transforms =&gt; [<a href="pcsc_apdu_transform.html#type-mod">pcsc_apdu_transform:mod()</a>]}</tt></p>
+<p> 
+  Additional options for <code>start_link/4</code>.
+  <ul>
+   <li><code>transforms</code>: initial set of transformation modules
+       to be used (see <code>set_transforms/2</code>)</li>
+  </ul></p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#begin_transaction-1">begin_transaction/1</a></td><td>Begins a transaction, for cards open in <code>shared</code> mode.</td></tr>
+<tr><td valign="top"><a href="#command-2">command/2</a></td><td>Sends a command, using the format of the last transformation module
+  enabled.</td></tr>
+<tr><td valign="top"><a href="#command-3">command/3</a></td><td>Sends a command using a specific format or transformation module.</td></tr>
+<tr><td valign="top"><a href="#disconnect-1">disconnect/1</a></td><td>Disconnects from the card and shuts down this <code>pcsc_card</code>
+  process.</td></tr>
+<tr><td valign="top"><a href="#end_transaction-1">end_transaction/1</a></td><td>Ends a transaction, for cards open in <code>shared</code> mode.</td></tr>
+<tr><td valign="top"><a href="#end_transaction-2">end_transaction/2</a></td><td>Ends a transaction, for cards open in <code>shared</code> mode.</td></tr>
+<tr><td valign="top"><a href="#set_transforms-2">set_transforms/2</a></td><td>Changes the set of transform modules in use for the connection.</td></tr>
+<tr><td valign="top"><a href="#start-3">start/3</a></td><td>Starts a connection to a PCSC card in the given reader.</td></tr>
+<tr><td valign="top"><a href="#start-4">start/4</a></td><td>Starts a connection to a PCSC card in the given reader, with additional
+  options.</td></tr>
+<tr><td valign="top"><a href="#start_link-3">start_link/3</a></td><td>Starts a connection to a PCSC card in the given reader, supervised by
+  the current process.</td></tr>
+<tr><td valign="top"><a href="#start_link-4">start_link/4</a></td><td>Starts a connection to a PCSC card in the given reader, supervised by
+  the current process, with additional options.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="begin_transaction-1">begin_transaction/1</a></h3>
+<div class="spec">
+<p><tt>begin_transaction(Pid::pid()) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Begins a transaction, for cards open in <code>shared</code> mode.
+  Note that beginning a transaction will open a monitor on the calling process,
+  and if it dies then the transaction will be ended with <code>reset</code>
+  disposition.</p>
+
+<h3 class="function"><a name="command-2">command/2</a></h3>
+<div class="spec">
+<p><tt>command(Pid::pid(), Cmd::term()) -&gt; {ok, [term()]} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Sends a command, using the format of the last transformation module
+  enabled. By default, <code>iso7816</code> is the only transform enabled,
+  meaning this function should be given <code>iso7816:apdu_cmd()</code>
+  records, and will return <code>iso7816:apdu_reply()</code> records.</p>
+
+<h3 class="function"><a name="command-3">command/3</a></h3>
+<div class="spec">
+<p><tt>command(Pid::pid(), ModOrFormat::<a href="#type-mod_or_fmt">mod_or_fmt()</a>, Cmd::term()) -&gt; {ok, [term()]} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Sends a command using a specific format or transformation module.
+  The type of the <code>Cmd</code> argument and the returned list items is
+  set by the transform in question.</p>
+
+<h3 class="function"><a name="disconnect-1">disconnect/1</a></h3>
+<div class="spec">
+<p><tt>disconnect(Pid::pid()) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Disconnects from the card and shuts down this <code>pcsc_card</code>
+  process.</p>
+
+<h3 class="function"><a name="end_transaction-1">end_transaction/1</a></h3>
+<div class="spec">
+<p><tt>end_transaction(Pid::pid()) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Ends a transaction, for cards open in <code>shared</code> mode.</p>
+
+<h3 class="function"><a name="end_transaction-2">end_transaction/2</a></h3>
+<div class="spec">
+<p><tt>end_transaction(Pid::pid(), Dispos::<a href="pcsc.html#type-disposition">pcsc:disposition()</a>) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Ends a transaction, for cards open in <code>shared</code> mode. The
+  additional <code>Disposition</code> argument can be used to indicate whether
+  to reset or power down the card after the end of this transaction.</p>
+
+<h3 class="function"><a name="set_transforms-2">set_transforms/2</a></h3>
+<div class="spec">
+<p><tt>set_transforms(Pid::pid(), ModStack::[<a href="pcsc_apdu_transform.html#type-mod">pcsc_apdu_transform:mod()</a>]) -&gt; ok | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Changes the set of transform modules in use for the connection. Takes a
+  list of transformation module names, ordered from "cooked" to "raw". The
+  final module on the list must produce type "binary", raw APDU data to be
+  sent on the wire.</p>
+
+<h3 class="function"><a name="start-3">start/3</a></h3>
+<div class="spec">
+<p><tt>start(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>, ShareMode::<a href="pcsc.html#type-sharemode">pcsc:sharemode()</a>, PrefProtos::[<a href="pcsc.html#type-protocol">pcsc:protocol()</a>]) -&gt; {ok, pid()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Starts a connection to a PCSC card in the given reader. Once this returns
+  ok, the connection is ready to use. If <code>ShareMode</code> is set to
+  <code>shared</code>, however, then a transaction will need to be begun before
+  APDUs can be send with <code>command/2-3</code></p>
+
+<h3 class="function"><a name="start-4">start/4</a></h3>
+<div class="spec">
+<p><tt>start(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>, ShareMode::<a href="pcsc.html#type-sharemode">pcsc:sharemode()</a>, PrefProtos::[<a href="pcsc.html#type-protocol">pcsc:protocol()</a>], Opts::<a href="#type-options">options()</a>) -&gt; {ok, pid()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Starts a connection to a PCSC card in the given reader, with additional
+  options. See also <code>start/3</code>.</p>
+
+<h3 class="function"><a name="start_link-3">start_link/3</a></h3>
+<div class="spec">
+<p><tt>start_link(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>, ShareMode::<a href="pcsc.html#type-sharemode">pcsc:sharemode()</a>, PrefProtos::[<a href="pcsc.html#type-protocol">pcsc:protocol()</a>]) -&gt; {ok, pid()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Starts a connection to a PCSC card in the given reader, supervised by
+  the current process. See also <code>start/3</code>.</p>
+
+<h3 class="function"><a name="start_link-4">start_link/4</a></h3>
+<div class="spec">
+<p><tt>start_link(RdrName::<a href="pcsc.html#type-rdrname">pcsc:rdrname()</a>, ShareMode::<a href="pcsc.html#type-sharemode">pcsc:sharemode()</a>, PrefProtos::[<a href="pcsc.html#type-protocol">pcsc:protocol()</a>], Opts::<a href="#type-options">options()</a>) -&gt; {ok, pid()} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p>Starts a connection to a PCSC card in the given reader, supervised by
+  the current process, with additional options. See also <code>start/3</code>.</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>
