@@ -10,6 +10,6 @@
   {mod, {pcsc_app, []}},
   {env,[]},
 
-  {licenses, ["Apache 2.0"]},
-  {links, []}
+  {licenses, ["BSD-2-Clause"]},
+  {links, [{"GitHub", "https://github.com/arekinath/erlang-pcsc"}]}
  ]}.
