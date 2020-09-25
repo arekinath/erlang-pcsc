@@ -29,6 +29,10 @@
 
 -include("iso7816.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -behaviour(pcsc_apdu_transform).
 
 % low-level encode/decode
@@ -561,12 +565,17 @@ decode_ber_len_data(<<0:1, Len:7, Data:(Len)/binary, Rest/binary>>) ->
 decode_ber_len_data(_) -> {error, bad_tag_length}.
 
 -spec decode_ber_tlv(binary()) -> {ok, integer(), binary(), binary()} | {error, term()}.
-decode_ber_tlv(<<_:3, 2#11111:5, Rem/binary>>) ->
-    {TagBin, Rem1} = take_next_until_high_bit(<<>>, Rem),
-    Tag = binary:decode_unsigned(TagBin),
-    case decode_ber_len_data(Rem1) of
-        {ok, Data, Rem2} -> {ok, Tag, Data, Rem2};
-        Err -> Err
+decode_ber_tlv(<<TopBits:3, 2#11111:5, Rem/binary>>) ->
+    case (catch take_next_until_high_bit(<<>>, Rem)) of
+        {'EXIT', _Reason} ->
+            {error, invalid_or_incomplete_tag};
+        {TagBin, Rem1} ->
+            Tag = binary:decode_unsigned(
+                <<TopBits:3, 2#11111:5, TagBin/binary>>),
+            case decode_ber_len_data(Rem1) of
+                {ok, Data, Rem2} -> {ok, Tag, Data, Rem2};
+                Err -> Err
+            end
     end;
 decode_ber_tlv(<<Tag, Rem/binary>>) ->
     case decode_ber_len_data(Rem) of
@@ -827,3 +836,36 @@ decode_atr(<<16#3B, ?ATR_Y, K:4, Rest0/binary>>) ->
     Intfs2 = decode_hist_bytes(Intfs1, HistBytes),
     Intfs2.
 
+-ifdef(TEST).
+
+decode_tlv_invalid_tag_test() ->
+    D = <<16#5F>>,
+    R = decode_ber_tlvs(D),
+    ?assertMatch({error, _}, R).
+
+decode_tlv_short_length_test() ->
+    D = <<16#01, 16#FF, 16#00>>,
+    R = decode_ber_tlvs(D),
+    ?assertMatch({error, _}, R).
+
+decode_tlv_one_byte_tag_test() ->
+    D = <<16#4F, 16#0B, 16#A0, 16#00, 16#00, 16#03, 16#08, 16#00, 16#00,
+          16#10, 16#00, 16#01, 16#00>>,
+    R = decode_ber_tlvs(D),
+    ?assertMatch({ok, [{16#4F, B}]} when is_binary(B), R).
+
+decode_tlv_two_byte_tag_test() ->
+    D = <<16#5F, 16#2F, 16#02, 16#00, 16#00>>,
+    R = decode_ber_tlvs(D),
+    ?assertMatch({ok, [{16#5F2F, <<0, 0>>}]}, R).
+
+decode_tlv_long_len_test() ->
+    D = <<16#01, 16#81, 200, 0:200/unit:8,
+          16#02, 16#82, 1024:16/big, 0:1024/unit:8>>,
+    R = decode_ber_tlvs(D),
+    ?assertMatch(
+        {ok, [ {16#01, B}, {16#02, B2} ]} when
+            (byte_size(B) == 200) and (byte_size(B2) == 1024),
+        R).
+
+-endif.
