@@ -83,6 +83,9 @@ end_transaction(S = #?MODULE{}) ->
 
 %% @private
 % Process a fresh incoming xapdu command.
+command(A0 = #apdu_cmd{data = none}, S0 = #?MODULE{source = undefined}) ->
+    S1 = S0#?MODULE{last = A0, source = undefined, spool = []},
+    {ok, [A0], S1};
 command(A0 = #apdu_cmd{data = D0}, S0 = #?MODULE{source = undefined}) ->
     if
         (byte_size(D0) > ?CHAIN_PART_LEN) ->
@@ -104,6 +107,14 @@ command(A0 = #apdu_cmd{data = D0}, S0 = #?MODULE{source = undefined}) ->
 
 %% @private
 % Last reply, or only reply (to a passed-through single APDU command)
+reply(R0 = #apdu_reply{sw = ok, data = none},
+                    S0 = #?MODULE{source = undefined, spool = Ds0}) ->
+    D1 = case Ds0 of
+        [] -> none;
+        _ -> iolist_to_binary(lists:reverse(Ds0))
+    end,
+    R1 = R0#apdu_reply{data = D1},
+    {ok, [R1], S0};
 reply(R0 = #apdu_reply{sw = ok, data = D0},
                     S0 = #?MODULE{source = undefined, spool = Ds0}) ->
     Ds1 = [D0 | Ds0],
