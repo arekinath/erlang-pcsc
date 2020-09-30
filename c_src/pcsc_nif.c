@@ -486,7 +486,7 @@ pcsc_nif_io_thread(void *arg)
 {
 	struct pcsc_nif_hdl *hdl = arg;
 	ErlNifEnv *msgenv;
-	ERL_NIF_TERM ret, msg;
+	ERL_NIF_TERM ret, msg, binterm;
 	DWORD rv;
 	struct pcsc_nif_io *io;
 	ErlNifPid owner;
@@ -658,7 +658,9 @@ pcsc_nif_io_thread(void *arg)
 				ret = pcsc_error_term(msgenv, rv);
 				break;
 			}
-			recvbin.size = *(volatile DWORD *)&recv_len;
+			binterm = enif_make_binary(msgenv, &recvbin);
+			binterm = enif_make_sub_binary(msgenv, binterm,
+			    0, recv_len);
 			switch (ioreq.dwProtocol) {
 			case SCARD_PROTOCOL_T0:
 				ret = enif_make_atom(msgenv, "t0");
@@ -675,8 +677,7 @@ pcsc_nif_io_thread(void *arg)
 			}
 			ret = enif_make_tuple3(msgenv,
 			    enif_make_atom(msgenv, "apdu"),
-			    ret,
-			    enif_make_binary(msgenv, &recvbin));
+			    ret, binterm);
 			break;
 		case PCSC_IO_STOP:
 			if (hdl->pnh_state == PCSC_HDL_IN_TXN) {
