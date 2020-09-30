@@ -153,7 +153,7 @@ reply(_R0 = #apdu_reply{sw = ok, data = none},
     end;
 
 % Any errors go through to the consumer.
-reply(R = #apdu_reply{sw = {error, _}}, S0 = #?MODULE{}) ->
+reply(R = #apdu_reply{sw = _}, S0 = #?MODULE{}) ->
     {ok, [R], S0}.
 
 %% @private
