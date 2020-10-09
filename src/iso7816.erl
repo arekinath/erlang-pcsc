@@ -40,6 +40,8 @@
 -export([encode_apdu_cmd/1, encode_apdu_reply/1]).
 -export([encode_ber_tlv/2, decode_ber_tlv/1]).
 -export([encode_ber_tlvs/1, decode_ber_tlvs/1]).
+-export([encode_ber_tlvs_map/2, decode_ber_tlvs_map/2]).
+-export([invert_tlv_map/1]).
 -export([decode_atr/1]).
 
 -export([
@@ -53,7 +55,7 @@
 ]).
 
 -export_type([apdu_cmd/0, apdu_reply/0, atr_info/0,
-    cls/0, ins/0, p1/0, p2/0, le/0, sw/0]).
+    cls/0, ins/0, p1/0, p2/0, le/0, sw/0, tlv_map/0, tlv_inv_map/0]).
 
 %% @headerfile "iso7816.hrl"
 
@@ -164,6 +166,19 @@
     leftovers => binary()
 }. %%
 %% Information decoded from an ATR value.
+
+-type tlv_map() :: #{
+    integer() =>
+        atom() | {atom(), tlv_map() | [atom()] | [{atom(), tlv_map()}]}}.
+%% A map used with <code>decode_ber_tlvs_map/2</code> to decode BER-TLV binary
+%% data into structured maps.
+
+-type tlv_inv_map() :: #{
+    atom() =>
+        integer() | {integer(), tlv_inv_map()} | [integer()] |
+        [{integer(), tlv_map()}]}.
+%% The inverted form of a <code>tlv_map()</code>, used with
+%% <code>encode_ber_tlvs_map/2</code>.
 
 -record(?MODULE, {
     proto :: pcsc:protocol(),
@@ -598,6 +613,138 @@ decode_ber_tlvs(SoFar, Bin) ->
         Err -> Err
     end.
 
+%% @doc Converts a <code>tlv_map()</code> into a <code>tlv_inv_map()</code>.
+-spec invert_tlv_map(tlv_map()) -> tlv_inv_map().
+invert_tlv_map(Map) ->
+    maps:fold(fun (K, V, Acc) ->
+        case V of
+            [{A, SubMap}] -> Acc#{A => [{K, invert_tlv_map(SubMap)}]};
+            {A, SubMap} -> Acc#{A => {K, invert_tlv_map(SubMap)}};
+            [A] -> Acc#{A => [K]};
+            A -> Acc#{A => K}
+        end
+    end, #{}, Map).
+
+%% @doc Decodes BER-TLV data into structured maps using a provided schema.
+%%
+%% An example schema (for the NIST PIV APT):
+%%
+%% <pre>
+%%  #{
+%%    16#61 => {apt, #{
+%%      16#4F => aid,
+%%      16#50 => app_label,
+%%      16#79 => {alloc_auth, #{
+%%        16#4F => aid
+%%      }},
+%%      16#5F50 => uri,
+%%      16#AC => {algos, #{
+%%        16#80 => [algo],
+%%        16#06 => oid
+%%      }}
+%%    }}
+%%  }
+%% </pre>
+%%
+%% Will produce maps like the following:
+%%
+%% <pre>
+%%    #{
+%%        apt => #{
+%%            aid => &lt;&lt;1,2,3,4>>,
+%%            app_label => &lt;&lt;"Testing">>,
+%%            uri => &lt;&lt;"https://test.com">>,
+%%            algos => #{
+%%                algo => [&lt;&lt;1>>, &lt;&lt;2>>, &lt;&lt;3>>]
+%%            }
+%%        }
+%%    }
+%% </pre>
+-spec decode_ber_tlvs_map(binary(), tlv_map()) -> {ok, map()}.
+decode_ber_tlvs_map(Bin, Map) ->
+    decode_ber_tlvs_map(#{}, Bin, Map).
+decode_ber_tlvs_map(SoFar, Bin, Map) ->
+    case decode_ber_tlv(Bin) of
+        {ok, Tag, Data, Rem} ->
+            VRet = case Map of
+                #{Tag := [{Atom, SubMap}]} ->
+                    case decode_ber_tlvs_map(Data, SubMap) of
+                        {ok, V} ->
+                            case SoFar of
+                                #{Atom := Vs0} ->
+                                    {ok, SoFar#{Atom => Vs0 ++ [V]}};
+                                _ ->
+                                    {ok, SoFar#{Atom => [V]}}
+                            end;
+                        Err ->
+                            Err
+                    end;
+                #{Tag := {Atom, SubMap}} ->
+                    case decode_ber_tlvs_map(Data, SubMap) of
+                        {ok, V} ->
+                            {ok, SoFar#{Atom => V}};
+                        Err ->
+                            Err
+                    end;
+                #{Tag := [Atom]} ->
+                    case SoFar of
+                        #{Atom := Vs0} ->
+                            {ok, SoFar#{Atom => Vs0 ++ [Data]}};
+                        _ ->
+                            {ok, SoFar#{Atom => [Data]}}
+                    end;
+                #{Tag := Atom} ->
+                    {ok, SoFar#{Atom => Data}};
+                _ ->
+                    {error, {unmapped_tag, Tag}}
+            end,
+            case {Rem, VRet} of
+                {<<>>, _} ->
+                    VRet;
+                {_, {ok, SoFar1}} ->
+                    decode_ber_tlvs_map(SoFar1, Rem, Map);
+                {_, _} ->
+                    VRet
+            end;
+        Err -> Err
+    end.
+
+%% @doc Encodes structured maps into BER-TLV data using a provided schema.
+-spec encode_ber_tlvs_map(map(), tlv_inv_map()) -> binary().
+encode_ber_tlvs_map(Map, InvTagMap) ->
+    Iter = maps:iterator(Map),
+    iolist_to_binary(lists:reverse(
+        encode_ber_tlvs_map([], Iter, InvTagMap))).
+
+encode_ber_tlvs_map(SoFar, Iter, InvTagMap) ->
+    case maps:next(Iter) of
+        none ->
+            SoFar;
+        {Atom, V, Iter1} ->
+            case InvTagMap of
+                #{Atom := [{Tag, SubTagMap}]} ->
+                    SoFar1 = lists:foldl(fun (VV, Acc) ->
+                        VV1 = encode_ber_tlvs_map(VV, SubTagMap),
+                        [encode_ber_tlv(Tag, VV1) | Acc]
+                    end, SoFar, V),
+                    encode_ber_tlvs_map(SoFar1, Iter1, InvTagMap);
+                #{Atom := {Tag, SubTagMap}} ->
+                    V1 = encode_ber_tlvs_map(V, SubTagMap),
+                    SoFar1 = [encode_ber_tlv(Tag, V1) | SoFar],
+                    encode_ber_tlvs_map(SoFar1, Iter1, InvTagMap);
+                #{Atom := [Tag]} ->
+                    SoFar1 = lists:foldl(fun (VV, Acc) ->
+                        [encode_ber_tlv(Tag, VV) | Acc]
+                    end, SoFar, V),
+                    encode_ber_tlvs_map(SoFar1, Iter1, InvTagMap);
+                #{Atom := Tag} ->
+                    SoFar1 = [encode_ber_tlv(Tag, V) | SoFar],
+                    encode_ber_tlvs_map(SoFar1, Iter1, InvTagMap);
+                _ ->
+                    error({unmapped_tag, Atom})
+            end
+    end.
+
 -define(ATR_Y, HasTD:1, HasTC:1, HasTB:1, HasTA:1).
 
 maybe_take_byte(0, Rest) -> {none, Rest};
@@ -867,5 +1014,74 @@ decode_tlv_long_len_test() ->
         {ok, [ {16#01, B}, {16#02, B2} ]} when
             (byte_size(B) == 200) and (byte_size(B2) == 1024),
         R).
+
+-define(test_tag_map, #{
+        16#61 => {apt, #{
+            16#4F => aid,
+            16#50 => app_label,
+            16#79 => {alloc_auth, #{
+                16#4F => aid
+            }},
+            16#5F50 => uri,
+            16#AC => {algos, #{
+                16#80 => [algo],
+                16#06 => oid
+            }}
+        }}
+    }).
+
+decode_tlv_map_test() ->
+    TagMap = ?test_tag_map,
+    D = base64:decode(<<"YX5PC6AAAAMIAAAQAAEAeQ1PC6AAAAMIAAAQAAEAUBpQaXZBcHBsZX"
+        "QgdjAuOC4yL1JFZVBTQXhhRF9QJmh0dHBzOi8vZ2l0aHViLmNvbS9hcmVraW5hdGgvUGl2"
+        "QXBwbGV0rBuAAQOAAQiAAQqAAQyAAQaAAQeAARGAARQGAQA=">>),
+    Ret = decode_ber_tlvs_map(D, TagMap),
+    ?assertMatch({ok, _}, Ret),
+    {ok, Map} = Ret,
+    ?assertMatch(#{apt := #{
+        aid := _, app_label := <<"PivApplet v0.8.2/REePSAxaD">>,
+        algos := #{
+            oid := <<0>>,
+            algo := [_|_]
+            }
+        }}, Map),
+    #{apt := #{algos := #{algo := AlgList}}} = Map,
+    ?assertMatch([<<3>> | _], AlgList).
+
+inv_map_test() ->
+    TagMap = ?test_tag_map,
+    InvTagMap = invert_tlv_map(TagMap),
+    ?assertMatch(#{
+        apt := {16#61, #{
+            aid := 16#4F,
+            app_label := 16#50,
+            alloc_auth := {16#79, #{
+                aid := 16#4F
+            }},
+            algos := {16#AC, #{
+                algo := [16#80],
+                oid := 16#06
+            }}
+        }}
+    }, InvTagMap).
+
+encode_tlv_map_test() ->
+    TagMap = ?test_tag_map,
+    Map = #{
+        apt => #{
+            aid => <<1,2,3,4>>,
+            app_label => <<"Testing">>,
+            uri => <<"https://test.com">>,
+            algos => #{
+                algo => [<<1>>, <<2>>, <<3>>]
+            }
+        }
+    },
+    D = encode_ber_tlvs_map(Map, invert_tlv_map(TagMap)),
+    {ok, Map2} = decode_ber_tlvs_map(D, TagMap),
+    ?assertMatch(Map, Map2),
+    ?assertMatch(
+        <<"YS1PBAECAwSsCYABAYABAoABA1AHVGVzdGluZ19QEGh0dHBzOi8vdGVzdC5jb20=">>,
+        base64:encode(D)).
 
 -endif.
