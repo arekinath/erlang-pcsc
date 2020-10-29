@@ -129,10 +129,18 @@ reply(R0 = #apdu_reply{sw = {warning, _}, data = D0},
 % First or subsequent reply (not last) in response chaining. Continue to
 % spool up the data and ask for more with a GET_RESPONSE command.
 reply(_R0 = #apdu_reply{sw = {continue, N}, data = D0},
-                    S0 = #?MODULE{source = undefined, spool = Ds0}) ->
+                    S0 = #?MODULE{source = undefined, spool = Ds0})
+                    when is_binary(D0) ->
     Ds1 = [D0 | Ds0],
     A0 = #apdu_cmd{ins = get_response, p1 = 0, p2 = 0, le = N},
     S1 = S0#?MODULE{spool = Ds1, last = A0},
+    {ok, [A0], [], S1};
+
+% T=0 devices can send this to let us know the Le for a non-retryable command
+reply(_R0 = #apdu_reply{proto = t0, sw = {continue, N}, data = none},
+                                    S0 = #?MODULE{source = undefined}) ->
+    A0 = #apdu_cmd{ins = get_response, p1 = 0, p2 = 0, le = N},
+    S1 = S0#?MODULE{last = A0},
     {ok, [A0], [], S1};
 
 % T=0 devices send this to ask us to retry a command with the correct Le.
