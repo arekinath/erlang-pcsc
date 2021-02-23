@@ -128,6 +128,8 @@ pcsc_nif_ctx_dtor(ErlNifEnv *env, void *obj)
 {
 	struct pcsc_nif_ctx *ctx = obj;
 
+	if(ctx->pnc_mtx == NULL) return;
+
 	enif_mutex_lock(ctx->pnc_mtx);
 	ctx->pnc_stopping = 1;
 	enif_mutex_unlock(ctx->pnc_mtx);
