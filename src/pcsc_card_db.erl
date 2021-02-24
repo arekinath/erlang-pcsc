@@ -1,7 +1,7 @@
 %%
 %% erlang NIF binding for libpcsc
 %%
-%% Copyright 2020 Alex Wilson <alex@uq.edu.au>, The University of Queensland
+%% Copyright 2021 Alex Wilson <alex@uq.edu.au>, The University of Queensland
 %%
 %% Redistribution and use in source and binary forms, with or without
 %% modification, are permitted provided that the following conditions
@@ -186,6 +186,11 @@ init([]) ->
     case pcsc_nif:new_context() of
         {ok, Ctx, MsgRef} ->
             {ok, #?MODULE{ctx = Ctx, msgref = MsgRef}};
+        {error, Err = {pcsc_error, _, Code, _}} when
+                        (Code =:= no_service) or (Code =:= no_readers) ->
+            FakeMsgRef = make_ref(),
+            timer:send_after(1000, {pcsc_reader_error, FakeMsgRef, Err}),
+            {ok, #?MODULE{msgref = FakeMsgRef}};
         Err ->
             lager:warning("pcsc_card_db failed to start: ~p", [Err]),
             {stop, Err}

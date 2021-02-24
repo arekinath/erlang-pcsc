@@ -2,7 +2,7 @@
 %%
 %% erlang NIF binding for libpcsc
 %%
-%% Copyright 2020 Alex Wilson <alex@uq.edu.au>, The University of Queensland
+%% Copyright 2021 Alex Wilson <alex@uq.edu.au>, The University of Queensland
 %%
 %% Redistribution and use in source and binary forms, with or without
 %% modification, are permitted provided that the following conditions
@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #if defined(__APPLE__)
 #include <PCSC/wintypes.h>
@@ -69,6 +70,19 @@ enum pcsc_nif_hdl_state {
 	PCSC_HDL_STOPPED
 };
 
+enum pcsc_nif_hdl_alloc_state {
+	PCSC_HDLF_CTX		= 1 << 0,
+	PCSC_HDLF_ENV_COND	= 1 << 1,
+	PCSC_HDLF_THREAD	= 1 << 2
+};
+
+enum pcsc_nif_ctx_alloc_state {
+	PCSC_CTXF_PCSC	 	= 1 << 0,
+	PCSC_CTXF_ENV		= 1 << 1,
+	PCSC_CTXF_THREAD 	= 1 << 2,
+	PCSC_CTXF_STOP 		= 1 << 3
+};
+
 struct pcsc_nif_io {
 	struct pcsc_nif_io *pni_next;
 	enum pcsc_nif_io_type pni_type;
@@ -81,6 +95,7 @@ struct pcsc_nif_hdl {
 	ErlNifMutex *pnh_mtx;
 
 	enum pcsc_nif_hdl_state pnh_state;
+	enum pcsc_nif_hdl_alloc_state pnh_astate;
 
 	SCARDCONTEXT pnh_context;
 
@@ -109,7 +124,7 @@ struct pcsc_nif_ctx {
 	ErlNifMutex *pnc_mtx;
 	ErlNifPid pnc_owner;
 	ErlNifTid pnc_watch_tid;
-	int pnc_stopping;
+	enum pcsc_nif_ctx_alloc_state pnc_astate;
 };
 
 static uint64_t
@@ -129,16 +144,41 @@ pcsc_nif_ctx_dtor(ErlNifEnv *env, void *obj)
 	struct pcsc_nif_ctx *ctx = obj;
 
 	enif_mutex_lock(ctx->pnc_mtx);
-	ctx->pnc_stopping = 1;
+
+	if (ctx->pnc_astate & PCSC_CTXF_THREAD) {
+		/* Set the flag to tell our watch thread to exit */
+		ctx->pnc_astate |= PCSC_CTXF_STOP;
+		enif_mutex_unlock(ctx->pnc_mtx);
+
+		/*
+		 * Now interrupt any outstanding PCSC op it's doing (like
+		 * watching for a new change event). This will wake it up and
+		 * make it look at PCSC_CTXF_STOP.
+		 */
+		SCardCancel(ctx->pnc_context);
+
+		/* Wait for the thread to die */
+		enif_thread_join(ctx->pnc_watch_tid, NULL);
+
+		enif_mutex_lock(ctx->pnc_mtx);
+		ctx->pnc_astate &= ~PCSC_CTXF_STOP;
+		ctx->pnc_astate &= ~PCSC_CTXF_THREAD;
+	}
+
+	if (ctx->pnc_astate & PCSC_CTXF_ENV) {
+		enif_free_env(ctx->pnc_env);
+		ctx->pnc_astate &= ~PCSC_CTXF_ENV;
+	}
+
+	if (ctx->pnc_astate & PCSC_CTXF_PCSC) {
+		SCardReleaseContext(ctx->pnc_context);
+		ctx->pnc_astate &= ~PCSC_CTXF_PCSC;
+	}
+
+	assert(ctx->pnc_astate == 0);
+
 	enif_mutex_unlock(ctx->pnc_mtx);
-
-	SCardCancel(ctx->pnc_context);
-
-	enif_thread_join(ctx->pnc_watch_tid, NULL);
-
 	enif_mutex_destroy(ctx->pnc_mtx);
-	enif_free_env(ctx->pnc_env);
-	SCardReleaseContext(ctx->pnc_context);
 }
 
 static void
@@ -147,28 +187,55 @@ pcsc_nif_hdl_dtor(ErlNifEnv *env, void *obj)
 	struct pcsc_nif_hdl *hdl = obj;
 	struct pcsc_nif_io *io;
 
-	io = enif_alloc(sizeof (struct pcsc_nif_io));
-	bzero(io, sizeof (struct pcsc_nif_io));
-	io->pni_type = PCSC_IO_STOP;
-
 	enif_mutex_lock(hdl->pnh_mtx);
-	if (hdl->pnh_ioq_tail == NULL) {
-		hdl->pnh_ioq = io;
-		hdl->pnh_ioq_tail = io;
-	} else {
-		hdl->pnh_ioq_tail->pni_next = io;
-		hdl->pnh_ioq_tail = io;
+
+	if (hdl->pnh_astate & PCSC_HDLF_THREAD) {
+		/*
+		 * Issue the special "STOP" I/O to tell the thread
+		 * to exit.
+		 */
+		io = enif_alloc(sizeof (struct pcsc_nif_io));
+		bzero(io, sizeof (struct pcsc_nif_io));
+		io->pni_type = PCSC_IO_STOP;
+
+		if (hdl->pnh_ioq_tail == NULL) {
+			hdl->pnh_ioq = io;
+			hdl->pnh_ioq_tail = io;
+		} else {
+			hdl->pnh_ioq_tail->pni_next = io;
+			hdl->pnh_ioq_tail = io;
+		}
+		enif_mutex_unlock(hdl->pnh_mtx);
+		enif_cond_signal(hdl->pnh_ioq_cond);
+
+		/* Wait for I/O thread to die */
+		enif_thread_join(hdl->pnh_io_tid, NULL);
+
+		enif_mutex_lock(hdl->pnh_mtx);
+		hdl->pnh_astate &= ~PCSC_HDLF_THREAD;
 	}
-	enif_mutex_unlock(hdl->pnh_mtx);
-	enif_cond_signal(hdl->pnh_ioq_cond);
 
-	enif_thread_join(hdl->pnh_io_tid, NULL);
+	if (hdl->pnh_astate & PCSC_HDLF_ENV_COND) {
+		enif_free_env(hdl->pnh_env);
+		enif_cond_destroy(hdl->pnh_ioq_cond);
+		hdl->pnh_astate &= ~PCSC_HDLF_ENV_COND;
+	}
 
-	enif_cond_destroy(hdl->pnh_ioq_cond);
-	enif_mutex_destroy(hdl->pnh_mtx);
+	if (hdl->pnh_astate & PCSC_HDLF_CTX) {
+		SCardReleaseContext(hdl->pnh_context);
+		hdl->pnh_astate &= ~PCSC_HDLF_CTX;
+	}
+
+	assert(hdl->pnh_astate == 0);
+
+	/*
+	 * free() doesn't care about being given NULL, so this
+	 * doesn't need its own flag.
+	 */
 	free(hdl->pnh_rdrname);
-	enif_free_env(hdl->pnh_env);
-	SCardReleaseContext(hdl->pnh_context);
+
+	enif_mutex_unlock(hdl->pnh_mtx);
+	enif_mutex_destroy(hdl->pnh_mtx);
 }
 
 static ERL_NIF_TERM
@@ -417,7 +484,7 @@ pcsc_nif_watch_thread(void *arg)
 				goto error;
 			}
 			enif_mutex_lock(ctx->pnc_mtx);
-			if (ctx->pnc_stopping) {
+			if (ctx->pnc_astate & PCSC_CTXF_STOP) {
 				enif_mutex_unlock(ctx->pnc_mtx);
 				return (NULL);
 			}
@@ -716,27 +783,29 @@ pcsc_nif_new_context(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	ctx = enif_alloc_resource(pcsc_nif_ctx_rsc,
 	    sizeof (struct pcsc_nif_ctx));
 	bzero(ctx, sizeof (struct pcsc_nif_ctx));
+	ctx->pnc_mtx = enif_mutex_create("pcsc_ctx_mtx");
+
 	rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL,
 	    &ctx->pnc_context);
 	if (rv != SCARD_S_SUCCESS) {
 		enif_release_resource(ctx);
 		return (pcsc_error_term(env, rv));
 	}
+	ctx->pnc_astate |= PCSC_CTXF_PCSC;
 
 	ctx->pnc_env = enif_alloc_env();
-	ctx->pnc_mtx = enif_mutex_create("pcsc_ctx_mtx");
+	ctx->pnc_astate |= PCSC_CTXF_ENV;
+
 	enif_self(env, &ctx->pnc_owner);
-	ctx->pnc_stopping = 0;
 	ctx->pnc_ref = enif_make_ref(ctx->pnc_env);
 
 	rv = enif_thread_create("pcsc_ctx_watch_thread", &ctx->pnc_watch_tid,
 	    pcsc_nif_watch_thread, ctx, pcsc_nif_thread_opts);
 	if (rv != 0) {
-		enif_mutex_destroy(ctx->pnc_mtx);
-		enif_free_env(ctx->pnc_env);
 		enif_release_resource(ctx);
 		return (errno_error_term(env, rv));
 	}
+	ctx->pnc_astate |= PCSC_CTXF_THREAD;
 
 	ret = enif_make_resource(env, ctx);
 	enif_release_resource(ctx);
@@ -816,6 +885,7 @@ pcsc_nif_connect(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	hdl = enif_alloc_resource(pcsc_nif_hdl_rsc,
 	    sizeof (struct pcsc_nif_hdl));
 	bzero(hdl, sizeof (struct pcsc_nif_hdl));
+	hdl->pnh_mtx = enif_mutex_create("pcsc_hdl_mtx");
 
 	rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL,
 	    &hdl->pnh_context);
@@ -823,10 +893,11 @@ pcsc_nif_connect(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		enif_release_resource(hdl);
 		return (pcsc_error_term(env, rv));
 	}
+	hdl->pnh_astate |= PCSC_HDLF_CTX;
 
 	hdl->pnh_env = enif_alloc_env();
-	hdl->pnh_mtx = enif_mutex_create("pcsc_hdl_mtx");
 	hdl->pnh_ioq_cond = enif_cond_create("pcsc_hdl_cond");
+	hdl->pnh_astate |= PCSC_HDLF_ENV_COND;
 
 	enif_mutex_lock(hdl->pnh_mtx);
 
@@ -834,12 +905,11 @@ pcsc_nif_connect(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	    pcsc_nif_io_thread, hdl, pcsc_nif_thread_opts);
 	if (rv != 0) {
 		enif_mutex_unlock(hdl->pnh_mtx);
-		enif_mutex_destroy(hdl->pnh_mtx);
-		enif_cond_destroy(hdl->pnh_ioq_cond);
-		enif_free_env(hdl->pnh_env);
 		enif_release_resource(hdl);
 		return (errno_error_term(env, rv));
 	}
+	hdl->pnh_astate |= PCSC_HDLF_THREAD;
+
 	/* XXX: reader names might be utf-8 */
 	hdl->pnh_rdrname = strdup(rdr_str);
 	hdl->pnh_share_mode = sharemode;
@@ -972,6 +1042,10 @@ pcsc_nif_change_ctx_owner(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_self(env, &self);
 
 	enif_mutex_lock(ctx->pnc_mtx);
+	if (!(ctx->pnc_astate & PCSC_CTXF_ENV)) {
+		enif_mutex_unlock(ctx->pnc_mtx);
+		return (enif_make_badarg(env));
+	}
 	if (enif_compare_pids(&ctx->pnc_owner, &self) == 0) {
 		ctx->pnc_owner = new_owner;
 		ret = enif_make_atom(env, "ok");
