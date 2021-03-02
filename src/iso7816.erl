@@ -176,9 +176,12 @@
 -type tlv_inv_map() :: #{
     atom() =>
         integer() | {integer(), tlv_inv_map()} | [integer()] |
-        [{integer(), tlv_map()}]}.
+        [{integer(), tlv_inv_map()}]} |
+    [ {atom(), integer() | {integer(), tlv_inv_map()} | [integer()] |
+        [{integer(), tlv_inv_map()}]}].
 %% The inverted form of a <code>tlv_map()</code>, used with
-%% <code>encode_ber_tlvs_map/2</code>.
+%% <code>encode_ber_tlvs_map/2</code>. Can be represented as a list instead
+%% of a map (for order-sensitive uses).
 
 -record(?MODULE, {
     proto :: pcsc:protocol(),
@@ -711,10 +714,46 @@ decode_ber_tlvs_map(SoFar, Bin, Map) ->
 
 %% @doc Encodes structured maps into BER-TLV data using a provided schema.
 -spec encode_ber_tlvs_map(map(), tlv_inv_map()) -> binary().
-encode_ber_tlvs_map(Map, InvTagMap) ->
+encode_ber_tlvs_map(Map, InvTagMap) when is_map(InvTagMap) ->
     Iter = maps:iterator(Map),
     iolist_to_binary(lists:reverse(
-        encode_ber_tlvs_map([], Iter, InvTagMap))).
+        encode_ber_tlvs_map([], Iter, InvTagMap)));
+encode_ber_tlvs_map(Map, InvTagMap) when is_list(InvTagMap) ->
+    iolist_to_binary(lists:reverse(
+        encode_ber_tlvs_map_list([], Map, InvTagMap))).
+
+encode_ber_tlvs_map_list(SoFar, Map, []) ->
+    case maps:keys(Map) of
+        [K | _] -> error({unmapped_tag, K});
+        [] -> SoFar
+    end;
+encode_ber_tlvs_map_list(SoFar, Map, [{Atom, Spec} | Rest]) ->
+    case Map of
+        #{Atom := V} ->
+            Map1 = maps:remove(Atom, Map),
+            case Spec of
+                [{Tag, SubTagMap}] when is_integer(Tag) ->
+                    SoFar1 = lists:foldl(fun (VV, Acc) ->
+                        VV1 = encode_ber_tlvs_map(VV, SubTagMap),
+                        [encode_ber_tlv(Tag, VV1) | Acc]
+                    end, SoFar, V),
+                    encode_ber_tlvs_map_list(SoFar1, Map1, Rest);
+                {Tag, SubTagMap} when is_integer(Tag) ->
+                    V1 = encode_ber_tlvs_map(V, SubTagMap),
+                    SoFar1 = [encode_ber_tlv(Tag, V1) | SoFar],
+                    encode_ber_tlvs_map_list(SoFar1, Map1, Rest);
+                [Tag] when is_integer(Tag) ->
+                    SoFar1 = lists:foldl(fun (VV, Acc) ->
+                        [encode_ber_tlv(Tag, VV) | Acc]
+                    end, SoFar, V),
+                    encode_ber_tlvs_map_list(SoFar1, Map1, Rest);
+                Tag when is_integer(Tag) ->
+                    SoFar1 = [encode_ber_tlv(Tag, V) | SoFar],
+                    encode_ber_tlvs_map_list(SoFar1, Map1, Rest)
+            end;
+        _ ->
+            encode_ber_tlvs_map_list(SoFar, Map, Rest)
+    end.
 
 encode_ber_tlvs_map(SoFar, Iter, InvTagMap) ->
     case maps:next(Iter) of
@@ -1083,5 +1122,33 @@ encode_tlv_map_test() ->
     ?assertMatch(
         <<"YS1PBAECAwSsCYABAYABAoABA1AHVGVzdGluZ19QEGh0dHBzOi8vdGVzdC5jb20=">>,
         base64:encode(D)).
+
+encode_tlv_ordered_map_test() ->
+    TagMap = #{
+        16#01 => {aaa, #{
+            16#80 => zzz
+        }},
+        16#02 => [bbb],
+        16#03 => ccc
+    },
+    InvTagMap = [
+        {bbb, [16#02]},
+        {aaa, {16#01, #{
+            zzz => 16#80
+        }}},
+        {ccc, 16#03}
+    ],
+    Map = #{
+        aaa => #{ zzz => <<"test">> },
+        bbb => [ <<"b1">>, <<"b2">> ],
+        ccc => <<"c0">>
+    },
+    D = encode_ber_tlvs_map(Map, InvTagMap),
+    {ok, Map2} = decode_ber_tlvs_map(D, TagMap),
+    ?assertMatch(Map, Map2),
+    ?assertMatch(
+        <<16#02, 2, "b1", 16#02, 2, "b2",
+          16#01, 6, 16#80, 4, "test",
+          16#03, 2, "c0">>, D).
 
 -endif.
