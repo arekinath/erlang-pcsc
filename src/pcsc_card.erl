@@ -363,12 +363,12 @@ handle_call({disconnect, Dispos}, From, S0 = #?MODULE{hdl = Hdl, msgref = MRef})
         {pcsc_io, MRef, ok} ->
             gen_server:reply(From, ok),
             {stop, normal, S0};
-        {pcsc_io, MRef, Err = {error, {pcsc_error, _, badarg, _}}} ->
+        {pcsc_io, MRef, {error, {pcsc_error, _, badarg, _}}} ->
             % pcsclite seems to return this often when a reader has gone away
             % TODO: read the pcsclite code to see why
             gen_server:reply(From, ok),
             {stop, normal, S0};
-        {pcsc_io, MRef, Err = {error, {pcsc_error, _, E, _}}} when
+        {pcsc_io, MRef, {error, {pcsc_error, _, E, _}}} when
                 (E =:= reader_unavailable) or (E =:= no_smartcard) ->
             % the handle was already disconnected because the card/rdr is gone
             gen_server:reply(From, ok),
@@ -384,11 +384,11 @@ handle_call(disconnect, From, S0 = #?MODULE{hdl = Hdl, msgref = MRef}) ->
         {pcsc_io, MRef, ok} ->
             gen_server:reply(From, ok),
             {stop, normal, S0};
-        {pcsc_io, MRef, Err = {error, {pcsc_error, _, badarg, _}}} ->
+        {pcsc_io, MRef, {error, {pcsc_error, _, badarg, _}}} ->
             % this error means the dispos was invalid, set it to "reset" and
             % try again? maybe it didn't like the one we set?
             handle_call({disconnect, reset}, From, S0);
-        {pcsc_io, MRef, Err = {error, {pcsc_error, _, E, _}}} when
+        {pcsc_io, MRef, {error, {pcsc_error, _, E, _}}} when
                 (E =:= reader_unavailable) or (E =:= no_smartcard) ->
             % the handle was already disconnected because the card/rdr is gone
             gen_server:reply(From, ok),
