@@ -264,6 +264,9 @@ pcsc_error_term(ErlNifEnv *env, DWORD rv)
 	case SCARD_E_SHARING_VIOLATION:
 		atomerr = enif_make_atom(env, "sharing_violation");
 		break;
+	case SCARD_E_PROTO_MISMATCH:
+		atomerr = enif_make_atom(env, "invalid_protocol");
+		break;
 	case SCARD_E_NO_SMARTCARD:
 		atomerr = enif_make_atom(env, "no_smartcard");
 		break;
@@ -284,6 +287,9 @@ pcsc_error_term(ErlNifEnv *env, DWORD rv)
 		break;
 	case SCARD_E_NO_READERS_AVAILABLE:
 		atomerr = enif_make_atom(env, "no_readers");
+		break;
+	case SCARD_E_INVALID_VALUE:
+		atomerr = enif_make_atom(env, "badarg");
 		break;
 	default:
 		atomerr = enif_make_atom(env, "other");

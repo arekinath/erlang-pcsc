@@ -104,7 +104,7 @@ start(RdrName, ShareMode, PrefProtos, Opts) ->
 %% process.
 -spec disconnect(pid()) -> ok | {error, term()}.
 disconnect(Pid) ->
-    gen_server:call(Pid, disconnect).
+    gen_server:call(Pid, disconnect, infinity).
 
 %% @doc Changes the set of transform modules in use for the connection. Takes a
 %% list of transformation module names, ordered from "cooked" to "raw". The
@@ -120,7 +120,7 @@ set_transforms(Pid, ModStack) ->
 %% disposition.
 -spec begin_transaction(pid()) -> ok | {error, term()}.
 begin_transaction(Pid) ->
-    gen_server:call(Pid, begin_transaction).
+    gen_server:call(Pid, begin_transaction, infinity).
 
 %% @doc Ends a transaction, for cards open in <code>shared</code> mode.
 -spec end_transaction(pid()) -> ok | {error, term()}.
@@ -131,7 +131,7 @@ end_transaction(Pid) -> end_transaction(Pid, leave).
 %% to reset or power down the card after the end of this transaction.
 -spec end_transaction(pid(), pcsc:disposition()) -> ok | {error, term()}.
 end_transaction(Pid, Dispos) ->
-    gen_server:call(Pid, {end_transaction, Dispos}).
+    gen_server:call(Pid, {end_transaction, Dispos}, infinity).
 
 %% @doc Sends a command, using the format of the last transformation module
 %% enabled. By default, <code>iso7816</code> is the only transform enabled,
@@ -362,7 +362,20 @@ handle_call({disconnect, Dispos}, From, S0 = #?MODULE{hdl = Hdl, msgref = MRef})
     receive
         {pcsc_io, MRef, ok} ->
             gen_server:reply(From, ok),
-            {stop, normal, S0}
+            {stop, normal, S0};
+        {pcsc_io, MRef, Err = {error, {pcsc_error, _, badarg, _}}} ->
+            % pcsclite seems to return this often when a reader has gone away
+            % TODO: read the pcsclite code to see why
+            gen_server:reply(From, ok),
+            {stop, normal, S0};
+        {pcsc_io, MRef, Err = {error, {pcsc_error, _, E, _}}} when
+                (E =:= reader_unavailable) or (E =:= no_smartcard) ->
+            % the handle was already disconnected because the card/rdr is gone
+            gen_server:reply(From, ok),
+            {stop, normal, S0};
+        {pcsc_io, MRef, Err = {error, _}} ->
+            % xxx: maybe some other errors also
+            {reply, Err, S0}
     end;
 
 handle_call(disconnect, From, S0 = #?MODULE{hdl = Hdl, msgref = MRef}) ->
@@ -370,7 +383,18 @@ handle_call(disconnect, From, S0 = #?MODULE{hdl = Hdl, msgref = MRef}) ->
     receive
         {pcsc_io, MRef, ok} ->
             gen_server:reply(From, ok),
-            {stop, normal, S0}
+            {stop, normal, S0};
+        {pcsc_io, MRef, Err = {error, {pcsc_error, _, badarg, _}}} ->
+            % this error means the dispos was invalid, set it to "reset" and
+            % try again? maybe it didn't like the one we set?
+            handle_call({disconnect, reset}, From, S0);
+        {pcsc_io, MRef, Err = {error, {pcsc_error, _, E, _}}} when
+                (E =:= reader_unavailable) or (E =:= no_smartcard) ->
+            % the handle was already disconnected because the card/rdr is gone
+            gen_server:reply(From, ok),
+            {stop, normal, S0};
+        {pcsc_io, MRef, Err = {error, _}} ->
+            {reply, Err, S0}
     end;
 
 handle_call(Msg, _From, S0 = #?MODULE{}) ->
