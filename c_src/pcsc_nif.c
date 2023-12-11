@@ -731,9 +731,9 @@ pcsc_nif_io_thread(void *arg)
 				ret = pcsc_error_term(msgenv, rv);
 				break;
 			}
+			if (recv_len != SCARD_RECV_BUF)
+				enif_realloc_binary(&recvbin, recv_len);
 			binterm = enif_make_binary(msgenv, &recvbin);
-			binterm = enif_make_sub_binary(msgenv, binterm,
-			    0, recv_len);
 			switch (ioreq.dwProtocol) {
 			case SCARD_PROTOCOL_T0:
 				ret = enif_make_atom(msgenv, "t0");
